@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pokédex Bubble Sort Visualizer</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #38bdf8;
+            --swap-color: #f43f5e;
+            --text-main: #f8fafc;
+            --input-bg: #334155;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls {
+            margin-bottom: 25px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 15px 30px;
+            border-radius: 50px;
+            border: 1px solid #334155;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            background: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button.reset-btn {
+            background: #64748b;
+            color: white;
+        }
+
+        button:hover { transform: scale(1.05); filter: brightness(1.1); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        select {
+            padding: 10px 20px;
+            border-radius: 20px;
+            background: var(--input-bg);
+            color: white;
+            border: 1px solid var(--accent);
+            font-weight: bold;
+            cursor: pointer;
+            outline: none;
+        }
+
+        #deck {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            max-width: 1300px;
+        }
+
+        .pokemon-card {
+            width: 150px;
+            height: 240px;
+            background: var(--card-bg);
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .pokemon-card.active {
+            border-color: var(--accent);
+            transform: scale(1.08);
+            z-index: 10;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+        }
+
+        .pokemon-card.swapping {
+            border-color: var(--swap-color);
+            transform: translateY(-15px);
+        }
+
+        .img-container {
+            width: 100%;
+            height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 15px;
+        }
+
+        .pokemon-img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .hp { position: absolute; top: 8px; right: 8px; color: #fb7185; font-weight: 800; font-size: 0.8rem; }
+        .p-name { font-weight: bold; text-align: center; margin-top: 10px; font-size: 1rem; }
+        .p-detail { font-size: 0.7rem; color: #94a3b8; text-align: center; margin-top: 2px; }
+        
+        .type-badge { 
+            margin-top: auto;
+            background: #334155;
+            font-size: 0.65rem;
+            padding: 4px;
+            border-radius: 4px;
+            text-align: center;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .log-box {
+            margin-top: 30px;
+            width: 90%;
+            max-width: 800px;
+            background: #000;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            height: 120px;
+            overflow-y: auto;
+            color: #4ade80;
+            border: 1px solid #334155;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Pokédex Bubble Sort</h1>
+    
+    <div class="controls">
+        <label for="sort-mode">Sort By:</label>
+        <select id="sort-mode">
+            <option value="overall">Overall (Hierarchical)</option>
+            <option value="stage">Stage (Evolution)</option>
+            <option value="gen">Generation</option>
+            <option value="hp">HP (Health)</option>
+            <option value="type">Primary Type</option>
+            <option value="name">Name (A-Z)</option>
+        </select>
+
+        <button onclick="runSort()" id="start-btn">Start Sort</button>
+        <button onclick="resetDeck()" class="reset-btn" id="reset-btn">Reset Deck</button>
+        
+        <div id="stats" style="margin-left: 15px; padding-left: 15px; border-left: 2px solid #334155;">
+            Comparisons: <span id="comp-count" style="color:var(--accent)">0</span> | 
+            Swaps: <span id="swap-count" style="color:var(--swap-color)">0</span>
+        </div>
+    </div>
+
+    <div id="deck"></div>
+
+    <div class="log-box" id="log">> Visualizer initialized. Select a criteria and press Start.</div>
+
+    <script>
+        const TYPE_RANK = {"Normal": 1, "Fire": 2, "Water": 3, "Electric": 4, "Grass": 5, "Ice": 6, "Fighting": 7, "Poison": 8, "Ground": 9, "Flying": 10, "Psychic": 11, "Bug": 12, "Rock": 13, "Ghost": 14, "Dragon": 15, "Dark": 16, "Steel": 17, "Fairy": 18};
+
+        // Original Unsorted Data (Constant)
+        const ORIGINAL_DATA = [
+            {"name": "Greninja", "stage": 2, "gen": 6, "hp": 72, "type": ["Water", "Dark"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/658.png"},
+            {"name": "Bulbasaur", "stage": 0, "gen": 1, "hp": 45, "type": ["Grass", "Poison"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1.png"},
+            {"name": "Lucario", "stage": 1, "gen": 4, "hp": 70, "type": ["Fighting", "Steel"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/448.png"},
+            {"name": "Pikachu", "stage": 0, "gen": 1, "hp": 35, "type": ["Electric", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png"},
+            {"name": "Gardevoir", "stage": 2, "gen": 3, "hp": 68, "type": ["Psychic", "Fairy"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/282.png"},
+            {"name": "Charmander", "stage": 0, "gen": 1, "hp": 39, "type": ["Fire", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/4.png"},
+            {"name": "Froakie", "stage": 0, "gen": 6, "hp": 41, "type": ["Water", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/656.png"},
+            {"name": "Ivysaur", "stage": 1, "gen": 1, "hp": 60, "type": ["Grass", "Poison"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/2.png"},
+            {"name": "Zoroark", "stage": 1, "gen": 5, "hp": 60, "type": ["Dark", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/571.png"},
+            {"name": "Charizard", "stage": 2, "gen": 1, "hp": 78, "type": ["Fire", "Flying"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png"},
+            {"name": "Riolu", "stage": 0, "gen": 4, "hp": 40, "type": ["Fighting", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/447.png"},
+            {"name": "Empoleon", "stage": 2, "gen": 4, "hp": 84, "type": ["Water", "Steel"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/395.png"},
+            {"name": "Frogadier", "stage": 1, "gen": 6, "hp": 54, "type": ["Water", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/657.png"},
+            {"name": "Blaziken", "stage": 2, "gen": 3, "hp": 80, "type": ["Fire", "Fighting"], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/257.png"},
+            {"name": "Eevee", "stage": 0, "gen": 1, "hp": 55, "type": ["Normal", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/133.png"},
+            {"name": "Sylveon", "stage": 1, "gen": 6, "hp": 95, "type": ["Fairy", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/700.png"},
+            {"name": "Dark Tyranitar", "stage": 2, "gen": 2, "hp": 100, "type": ["Dark", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/248.png"},
+            {"name": "Abra", "stage": 0, "gen": 1, "hp": 25, "type": ["Psychic", null], "image": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/63.png"}
+        ];
+
+        // Working Copy
+        let deckData = JSON.parse(JSON.stringify(ORIGINAL_DATA));
+        let isSorting = false;
+
+        function shouldSwap(a, b) {
+            const mode = document.getElementById('sort-mode').value;
+
+            // SINGLE CRITERIA LOGIC
+            if (mode === 'stage') {
+                // If stages are different, swap based on stage
+                // If stages are same, we do NOT swap (Stable Sort)
+                return a.stage > b.stage;
+            }
+            if (mode === 'gen') {
+                return a.gen > b.gen;
+            }
+            if (mode === 'hp') {
+                return a.hp > b.hp;
+            }
+            if (mode === 'type') {
+                const typeA = TYPE_RANK[a.type[0]] || 99;
+                const typeB = TYPE_RANK[b.type[0]] || 99;
+                return typeA > typeB;
+            }
+            if (mode === 'name') {
+                return a.name > b.name;
+            }
+
+            // OVERALL (HIERARCHICAL) LOGIC
+            // Stage -> Gen -> HP -> Type -> Name
+            if (a.stage !== b.stage) return a.stage > b.stage;
+            if (a.gen !== b.gen) return a.gen > b.gen;
+            if (a.hp !== b.hp) return a.hp > b.hp;
+            
+            const typeA = a.type[0];
+            const typeB = b.type[0];
+            if (typeA !== typeB) return TYPE_RANK[typeA] > TYPE_RANK[typeB];
+            
+            return a.name > b.name;
+        }
+
+        const container = document.getElementById('deck');
+        
+        function renderDeck() {
+            container.innerHTML = '';
+            deckData.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'pokemon-card';
+                card.innerHTML = `
+                    <div class="hp">${p.hp} HP</div>
+                    <div class="img-container">
+                        <img src="${p.image}" class="pokemon-img" alt="${p.name}">
+                    </div>
+                    <div class="p-name">${p.name}</div>
+                    <div class="p-detail">Stage ${p.stage} | Gen ${p.gen}</div>
+                    <div class="type-badge">${p.type[0]}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function resetDeck() {
+            if (isSorting) return; // Prevent reset during sort
+            deckData = JSON.parse(JSON.stringify(ORIGINAL_DATA));
+            document.getElementById('comp-count').innerText = "0";
+            document.getElementById('swap-count').innerText = "0";
+            document.getElementById('log').innerHTML += `<br>> Deck reset to original unsorted state.`;
+            document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+            document.getElementById('start-btn').disabled = false;
+            renderDeck();
+        }
+
+        renderDeck();
+
+        async function runSort() {
+            if(isSorting) return;
+            isSorting = true;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('reset-btn').disabled = true;
+            document.getElementById('sort-mode').disabled = true;
+
+            const modeText = document.getElementById('sort-mode').options[document.getElementById('sort-mode').selectedIndex].text;
+            const log = document.getElementById('log');
+            log.innerHTML += `<br>> Starting sort by: <strong>${modeText}</strong>`;
+            
+            let n = deckData.length;
+            let swaps = 0;
+            let comparisons = 0;
+            
+            for (let i = 0; i < n; i++) {
+                let sortedPass = true;
+                for (let j = 0; j < n - i - 1; j++) {
+                    comparisons++;
+                    document.getElementById('comp-count').innerText = comparisons;
+                    
+                    const cards = container.children;
+                    cards[j].classList.add('active');
+                    cards[j+1].classList.add('active');
+
+                    // Animation Delay
+                    await new Promise(r => setTimeout(r, 60));
+
+                    if (shouldSwap(deckData[j], deckData[j+1])) {
+                        swaps++;
+                        sortedPass = false;
+                        document.getElementById('swap-count').innerText = swaps;
+                        
+                        cards[j].classList.add('swapping');
+                        cards[j+1].classList.add('swapping');
+                        
+                        log.innerHTML += `<br>> SWAP: ${deckData[j].name} > ${deckData[j+1].name}`;
+                        log.scrollTop = log.scrollHeight;
+
+                        [deckData[j], deckData[j+1]] = [deckData[j+1], deckData[j]];
+                        container.insertBefore(cards[j+1], cards[j]);
+                        
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+
+                    cards[j].classList.remove('active', 'swapping');
+                    cards[j+1].classList.remove('active', 'swapping');
+                }
+                if (sortedPass) break;
+            }
+            log.innerHTML += `<br><strong>*** SORT COMPLETE (${swaps} SWAPS) ***</strong>`;
+            
+            isSorting = false;
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('reset-btn').disabled = false;
+            document.getElementById('sort-mode').disabled = false;
+        }
+    </script>
+</body>
+</html>
